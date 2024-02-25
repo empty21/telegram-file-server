@@ -17,4 +17,5 @@ RUN go build -o server telegram-file-server/cmd/server
 FROM aiogram/telegram-bot-api:latest as RUN
 COPY --from=build /server/server /server
 COPY docker-entrypoint.sh docker-entrypoint.sh
+RUN chmod +x docker-entrypoint.sh
 EXPOSE ${PORT:-8080}
