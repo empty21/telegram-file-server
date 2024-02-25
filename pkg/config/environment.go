@@ -10,8 +10,7 @@ type environment struct {
 	ServerPort          int    `env:"SERVER_PORT" yaml:"ServerPort" default:"8080"`
 	ServerBodySizeLimit int64  `env:"SERVER_BODY_SIZE_LIMIT" yaml:"ServerBodySizeLimit" default:"2147483648"` // 2GB
 	LogLevel            string `env:"LOG_LEVEL" yaml:"LogLevel" default:"info"`
-	DatabaseDSN         string `env:"DATABASE_DSN" yaml:"DatabaseDSN" required:"true"`
-	ApiKey              string `env:"API_KEY" yaml:"ApiKey" required:"true"`
+	Secret              string `env:"SECRET" yaml:"Secret" required:"true"`
 
 	// Telegram
 	_                      int    `env:"TELEGRAM_API_ID" required:"true"`
@@ -26,5 +25,8 @@ var Environment environment
 func init() {
 	log.Info("Server is starting up...")
 	log.Panic(configor.Load(&Environment, "config.yml"))
-	initDatabase()
+	if len(Environment.Secret) != 32 {
+		log.Error("Secret must be 32 characters long")
+		panic("Secret must be 32 characters long")
+	}
 }

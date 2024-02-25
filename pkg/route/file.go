@@ -10,11 +10,11 @@ import (
 	"telegram-file-server/pkg/log"
 	"telegram-file-server/pkg/middleware"
 	"telegram-file-server/pkg/model"
-	"telegram-file-server/pkg/repository"
 	"telegram-file-server/pkg/telegram"
+	"telegram-file-server/pkg/util"
 )
 
-var fileRepository repository.FileRepository
+var fileUtil util.FileUtil
 
 func uploadFile(c *fiber.Ctx) error {
 	requestFile, err := c.FormFile("file")
@@ -39,27 +39,31 @@ func uploadFile(c *fiber.Ctx) error {
 		return c.Status(500).JSON(model.NewErrorResponse("Failed to upload file"))
 	}
 	file := model.NewFile(fileId, requestFile.Filename, requestFile.Header.Get("Content-Type"))
-	err = fileRepository.Save(file)
 
+	err = fileUtil.EncryptFile(file)
 	if err != nil {
-		log.Error("Failed to save file: %v", err.Error())
-		return c.Status(500).JSON(model.NewErrorResponse("Failed to save file"))
+		log.Error("Failed to encrypt file: %v", err.Error())
+		return c.Status(500).JSON(model.NewErrorResponse("Internal server error"))
+
 	}
 
 	return c.Status(200).JSON(model.NewResponse("File uploaded successfully", file))
 }
 
 func getFile(c *fiber.Ctx) error {
-	fileUuid := c.Params("id")
-	if fileUuid == "" {
+	fileId := c.Params("id")
+	if fileId == "" {
 		return c.Status(400).JSON(model.NewErrorResponse("File id is required"))
 	}
+	file := model.NewEncryptedFile(fileId)
+	err := fileUtil.DecryptFile(file)
 
-	file, err := fileRepository.FindById(fileUuid)
 	if err != nil {
-		log.Error("Failed to get file: %v", err.Error())
-		return c.Status(404).JSON(model.NewErrorResponse("File not found"))
+		log.Error("Failed to decrypt file: %v", err.Error())
+		return c.Status(500).JSON(model.NewErrorResponse("Failed to decrypt file"))
 	}
+
+	log.Info("File: %v", file.Name)
 
 	filePath, err := cache.GetFile(telegram.GetFile)(file.FileId)
 	if err != nil {
@@ -71,21 +75,11 @@ func getFile(c *fiber.Ctx) error {
 	return c.Status(200).SendFile(filePath)
 }
 
-func deleteFile(c *fiber.Ctx) error {
-	fileUuid := c.Params("id")
-	if fileUuid == "" {
-		return c.Status(400).JSON(model.NewErrorResponse("File id is required"))
-	}
-	err := fileRepository.Delete(fileUuid)
-	if err != nil {
-		return c.Status(500).JSON(model.NewErrorResponse("Failed to delete file"))
-	}
-	return c.Status(200).JSON(model.NewResponse("File deleted successfully", nil))
-}
-
 func RegisterFileRoutes(app *fiber.App) {
-	app.Post("/upload", uploadFile, middleware.AuthMiddleware)
-	app.Delete("/:id", deleteFile, middleware.AuthMiddleware)
+	app.Post("/upload", middleware.AuthMiddleware, uploadFile)
 	app.Get("/:id", getFile)
-	fileRepository = repository.NewFileRepository(config.Database)
+	fileUtil = util.NewFileUtil(config.Environment.Secret)
+	if fileUtil == nil {
+		log.Error("Failed to create file util")
+	}
 }
