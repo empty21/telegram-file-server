@@ -19,3 +19,4 @@ COPY --from=build /server/server /server
 COPY docker-entrypoint.sh docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 EXPOSE ${PORT:-8080}
+ENTRYPOINT ["/bin/sh", "docker-entrypoint.sh"]
